@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Farbmischer – 2-Farben-Optimierer</title>
+<meta name="theme-color" content="#2563eb" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<style>
+  :root {
+    --gap: 14px;
+    --radius: 16px;
+    --shadow: 0 6px 18px rgba(0,0,0,.08);
+    --border: 1px solid rgba(0,0,0,.08);
+    --bg: #fafafa;
+    --text: #111827;
+    --card: #fff;
+  }
+  [data-theme="dark"] {
+    --bg: #0f172a;
+    --text: #f1f5f9;
+    --card: #1e293b;
+    --border: 1px solid rgba(255,255,255,.1);
+  }
+  body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; }
+  h1 { font-size: 22px; margin-bottom: 16px; text-align: center; }
+  .app { max-width: 900px; margin: auto; display: grid; gap: var(--gap); }
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); border: var(--border); padding: 20px; }
+  .grid { display: grid; gap: var(--gap); }
+  .grid.cols-4 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  label { font-size: 14px; opacity: .8; }
+  input[type="number"] { width: 100%; padding: 14px; font-size: 18px; border-radius: 12px; border: var(--border); background: var(--card); color: var(--text); }
+  .btn { background: #2563eb; color: white; border: none; font-size: 18px; font-weight: 600; border-radius: 12px; padding: 16px; width: 100%; cursor: pointer; }
+  .btn:hover { background: #1e40af; }
+  .tiles, .allcolors { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .tile, .smalltile { border: var(--border); border-radius: var(--radius); background: var(--card); overflow: hidden; box-shadow: var(--shadow); }
+  .swatch { height: 100px; }
+  .meta { padding: 10px 14px; }
+  .title { font-weight: 700; }
+  .sub { font-size: 13px; opacity: .8; }
+  .note { font-size: 13px; opacity: .7; }
+  .error { color: #b91c1c; background: #fee2e2; padding: 12px; border-radius: 10px; display: none; }
+  .toggle-dark { position: fixed; top: 16px; right: 16px; background: var(--card); border: var(--border); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow); }
+</style>
+</head>
+<body>
+<div class="toggle-dark" id="toggleDark">🌙</div>
+<div class="app">
+  <h1>🎨 Farbmischer – 2-Farben-Optimierer</h1>
+  <div id="err" class="error">Fehler beim Laden.</div>
+  <div class="card">
+    <div class="grid cols-4">
+      <div><label for="rIn">Ziel R</label><input id="rIn" type="number" min="0" max="255" value="230" /></div>
+      <div><label for="gIn">Ziel G</label><input id="gIn" type="number" min="0" max="255" value="180" /></div>
+      <div><label for="bIn">Ziel B</label><input id="bIn" type="number" min="0" max="255" value="120" /></div>
+      <div><button class="btn" id="runBtn">🔍 Beste Mischung</button></div>
+    </div>
+    <p class="note">Werte 0–255, Mischung linear im RGB.</p>
+  </div>
+  <div class="card"><div id="resultTiles" class="tiles"></div></div>
+  <div class="card">
+    <p class="note">Verfügbare Farben</p>
+    <div id="allColors" class="allcolors"></div>
+  </div>
+</div>
+<script>
+const FARBDATEN = [
+  { name: "Ultramarin", number: "101", label: "PB29 Ultramarin", R:25,G:40,B:150 },
+  { name: "Kadmiumgelb", number: "202", label: "PY35 Kadmiumgelb", R:240,G:200,B:50 },
+  { name: "Permanentrot", number: "303", label: "PR254 Permanentrot", R:200,G:40,B:60 },
+  { name: "Phthalogrün", number: "404", label: "PG7 Phthalogrün", R:20,G:120,B:80 },
+  { name: "Paynesgrau", number: "505", label: "PBk6 Paynesgrau", R:60,G:70,B:80 },
+  { name: "Kobalttürkis", number: "606", label: "PG50 Kobalttürkis", R:70,G:150,B:160 },
+  { name: "Indischgelb", number: "707", label: "PY110 Indischgelb", R:230,G:180,B:60 },
+  { name: "Magenta", number: "808", label: "PR122 Magenta", R:210,G:30,B:130 },
+  { name: "Siena gebrannt", number: "909", label: "PBr7 Siena gebrannt", R:140,G:70,B:50 },
+  { name: "Umbra natur", number: "910", label: "PBr7 Umbra natur", R:110,G:80,B:60 },
+  { name: "Titanweiß", number: "001", label: "PW6 Titanweiß", R:245,G:245,B:245 },
+  { name: "Elfenbeinschwarz", number: "002", label: "PBk9 Elfenbeinschwarz", R:20,G:20,B:20 }
+];
+function rgb(c){return `rgb(${c.R},${c.G},${c.B})`;}
+function mix(c1,c2,p1){const p2=1-p1;return{R:Math.round(c1.R*p1+c2.R*p2),G:Math.round(c1.G*p1+c2.G*p2),B:Math.round(c1.B*p1+c2.B*p2)}}
+function dist2(a,b){const dR=a.R-b.R,dG=a.G-b.G,dB=a.B-b.B;return dR*dR+dG*dG+dB*dB;}
+function findBest(target){let best=null;for(let i=0;i<FARBDATEN.length;i++){for(let j=i+1;j<FARBDATEN.length;j++){for(let p=0;p<=100;p++){const m=mix(FARBDATEN[i],FARBDATEN[j],p/100);const d=dist2(m,target);if(!best||d<best.d){best={i,j,p,dp:100-p,m,d}}}}}return best;}
+function renderAll(){const host=document.getElementById('allColors');host.innerHTML='';FARBDATEN.forEach(c=>{const t=document.createElement('div');t.className='smalltile';t.innerHTML=`<div class=swatch style=background:${rgb(c)}></div><div class=meta><div class=title>${c.name}</div><div class=sub>#${c.number}</div><div class=sub>${c.label}</div><div class=sub>RGB ${c.R},${c.G},${c.B}</div></div>`;host.appendChild(t)});}
+function renderRes(best,target){const host=document.getElementById('resultTiles');if(!best)return host.innerHTML='<p class=note>Kein Ergebnis.</p>';const A=FARBDATEN[best.i],B=FARBDATEN[best.j];const tiles=[
+  {t:'Farbe 1',c:A,sub:`${A.name} #${A.number}`,extra:`Anteil: ${best.p}%`},
+  {t:'Farbe 2',c:B,sub:`${B.name} #${B.number}`,extra:`Anteil: ${best.dp}%`},
+  {t:'Mischung',c:best.m,sub:`RGB ${best.m.R},${best.m.G},${best.m.B}`,extra:`Abstand ${(Math.sqrt(best.d)).toFixed(1)}`},
+  {t:'Ziel',c:target,sub:`RGB ${target.R},${target.G},${target.B}`,extra:''}
+];host.innerHTML='';tiles.forEach(x=>{const el=document.createElement('div');el.className='tile';el.innerHTML=`<div class=swatch style=background:${rgb(x.c)}></div><div class=meta><div class=title>${x.t}</div><div class=sub>${x.sub}</div><div class=sub>${x.extra}</div></div>`;host.appendChild(el)});}
+function run(){const r=parseInt(rIn.value)||0,g=parseInt(gIn.value)||0,b=parseInt(bIn.value)||0;const target={R:r,G:g,B:b};const best=findBest(target);renderRes(best,target);}
+runBtn.addEventListener('click',run);renderAll();run();
+// Dark mode toggle
+const toggle=document.getElementById('toggleDark');toggle.addEventListener('click',()=>{const isDark=document.body.getAttribute('data-theme')==='dark';document.body.setAttribute('data-theme',isDark?'light':'dark');toggle.textContent=isDark?'🌙':'☀️';});
+// Register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(err => console.log('SW error', err));
+  });
+}
+</script>
+</body>
+</html>
